@@ -2,7 +2,24 @@ import { create } from 'zustand';
 import { mergeLayout, prunePositions, type XY } from '@/lib/layout';
 import { parseDbml } from '@/lib/parseDbml';
 import { type Diagnostic, emptySchema, type Schema } from '@/lib/schema';
-import { loadDoc, loadUi, saveDoc, saveUi, type UiState } from '@/lib/storage';
+import {
+  ACTIVE_DOCUMENT_KEY,
+  createStoredDocument,
+  deleteStoredDocument,
+  DOCUMENT_KEY_PREFIX,
+  DOCUMENTS_KEY,
+  duplicateStoredDocument,
+  ensureDocumentLibrary,
+  listDocuments,
+  loadDocument,
+  loadUi,
+  renameStoredDocument,
+  saveDocument,
+  saveUi,
+  setActiveDocument,
+  type DocumentMeta,
+  type UiState,
+} from '@/lib/storage';
 
 export const SAMPLE_DBML = `// Use DBML to define your database structure
 // Docs: https://dbml.dbdiagram.io/docs
@@ -49,8 +66,14 @@ Records posts(id, title, user_id) {
 }
 `;
 
-/** What the canvas highlights, and where it came from — the origin decides who scrolls. */
-export type Selection = { tableId: string; origin: 'canvas' | 'editor' } | null;
+/** Origin controls cross-panel navigation: palette selections intentionally drive both sides. */
+export type Selection = {
+  tableId: string;
+  column?: string;
+  origin: 'canvas' | 'editor' | 'palette';
+} | null;
+
+export type DocumentCreateInput = { name?: string; dbml?: string; positions?: Record<string, XY> };
 
 type State = {
   source: string;
@@ -60,6 +83,8 @@ type State = {
   hasValidSchema: boolean;
   diagnostics: Diagnostic[];
   positions: Record<string, XY>;
+  documents: DocumentMeta[];
+  activeDocumentId: string;
   selection: Selection;
   hoveredColumn: { tableId: string; column: string } | null;
   ui: UiState;
@@ -73,23 +98,31 @@ type State = {
   select: (selection: Selection) => void;
   hoverColumn: (value: { tableId: string; column: string } | null) => void;
   patchUi: (patch: Partial<UiState>) => void;
+  createDocument: (input?: DocumentCreateInput) => string;
+  switchDocument: (id: string) => void;
+  renameDocument: (id: string, name: string) => void;
+  duplicateDocument: (id: string) => void;
+  deleteDocument: (id: string) => void;
+  replaceActiveDocument: (dbml: string) => void;
+  appendToActiveDocument: (dbml: string) => void;
   markExternalChange: () => void;
+  syncExternalIndex: () => void;
   reloadFromStorage: () => void;
 };
 
 const DEFAULT_UI: UiState = { editorWidth: 460, editorCollapsed: false, theme: 'light' };
-
-const restored = loadDoc();
-const initialSource = restored?.dbml ?? SAMPLE_DBML;
-const firstParse = parseDbml(initialSource);
+const library = ensureDocumentLibrary(SAMPLE_DBML);
+const firstParse = parseDbml(library.snapshot.dbml);
 const initialSchema = firstParse.ok ? firstParse.schema : emptySchema();
 
 export const useStore = create<State>((set, get) => ({
-  source: initialSource,
+  source: library.snapshot.dbml,
   schema: initialSchema,
   hasValidSchema: firstParse.ok,
   diagnostics: firstParse.diagnostics,
-  positions: mergeLayout(initialSchema, restored?.positions ?? {}),
+  positions: mergeLayout(initialSchema, library.snapshot.positions),
+  documents: library.documents,
+  activeDocumentId: library.activeId,
   selection: null,
   hoveredColumn: null,
   ui: loadUi() ?? DEFAULT_UI,
@@ -98,40 +131,42 @@ export const useStore = create<State>((set, get) => ({
   setSource: (source) => set({ source }),
 
   commitParse: () => {
-    const { source, positions, selection } = get();
+    const { source, positions, selection, activeDocumentId } = get();
     const result = parseDbml(source);
     if (!result.ok) {
-      // Invalid mid-typing is the normal case: keep the last good schema on the
-      // canvas and surface diagnostics only. Persist source alone so the draft
-      // survives a reload, but leave the last-good positions untouched.
-      set({ diagnostics: result.diagnostics });
-      saveDoc({ dbml: source, positions });
+      // Invalid mid-typing is normal: keep the last good schema visible, but
+      // persist the draft so reload cannot discard what the user just typed.
+      const documents = saveDocument(activeDocumentId, { dbml: source, positions });
+      set({ diagnostics: result.diagnostics, documents });
       return;
     }
-    // Survivors keep their coordinates; tables that first appear here get placed.
     const next = mergeLayout(result.schema, prunePositions(result.schema, positions));
+    const documents = saveDocument(activeDocumentId, { dbml: source, positions: next });
     set({
       schema: result.schema,
       hasValidSchema: true,
       diagnostics: [],
       positions: next,
-      // A rename drops the old id, so a stale selection would highlight nothing.
-      selection: selection && result.schema.tables.some((t) => t.id === selection.tableId) ? selection : null,
+      documents,
+      selection:
+        selection && result.schema.tables.some((table) => table.id === selection.tableId)
+          ? selection
+          : null,
     });
-    saveDoc({ dbml: source, positions: next });
   },
 
   moveTable: (id, position) => {
+    const { source, activeDocumentId } = get();
     const positions = { ...get().positions, [id]: position };
-    set({ positions });
-    saveDoc({ dbml: get().source, positions });
+    const documents = saveDocument(activeDocumentId, { dbml: source, positions });
+    set({ positions, documents });
   },
 
   autoArrange: () => {
-    const { schema, source } = get();
+    const { schema, source, activeDocumentId } = get();
     const positions = mergeLayout(schema, {});
-    set({ positions });
-    saveDoc({ dbml: source, positions });
+    const documents = saveDocument(activeDocumentId, { dbml: source, positions });
+    set({ positions, documents });
   },
 
   select: (selection) => set({ selection }),
@@ -143,21 +178,132 @@ export const useStore = create<State>((set, get) => ({
     saveUi(ui);
   },
 
+  createDocument: (input = {}) => {
+    const source = input.dbml ?? SAMPLE_DBML;
+    const parsed = parseDbml(source);
+    const schema = parsed.ok ? parsed.schema : emptySchema();
+    const positions = parsed.ok
+      ? mergeLayout(schema, input.positions ?? {})
+      : input.positions ?? {};
+    const snapshot = { dbml: source, positions };
+    const created = createStoredDocument(input.name ?? 'Untitled Diagram', snapshot);
+    set({
+      source,
+      schema,
+      hasValidSchema: parsed.ok,
+      diagnostics: parsed.diagnostics,
+      positions,
+      documents: created.documents,
+      activeDocumentId: created.meta.id,
+      selection: null,
+      hoveredColumn: null,
+      externallyChanged: false,
+    });
+    return created.meta.id;
+  },
+
+  switchDocument: (id) => {
+    if (id === get().activeDocumentId) return;
+    const snapshot = loadDocument(id);
+    if (!snapshot) return;
+    const parsed = parseDbml(snapshot.dbml);
+    const schema = parsed.ok ? parsed.schema : emptySchema();
+    setActiveDocument(id);
+    set({
+      source: snapshot.dbml,
+      schema,
+      hasValidSchema: parsed.ok,
+      diagnostics: parsed.diagnostics,
+      positions: mergeLayout(schema, snapshot.positions),
+      documents: listDocuments(),
+      activeDocumentId: id,
+      selection: null,
+      hoveredColumn: null,
+      externallyChanged: false,
+    });
+  },
+
+  renameDocument: (id, name) => set({ documents: renameStoredDocument(id, name) }),
+
+  duplicateDocument: (id) => {
+    const duplicated = duplicateStoredDocument(id);
+    if (!duplicated) return;
+    const parsed = parseDbml(duplicated.snapshot.dbml);
+    const schema = parsed.ok ? parsed.schema : emptySchema();
+    set({
+      source: duplicated.snapshot.dbml,
+      schema,
+      hasValidSchema: parsed.ok,
+      diagnostics: parsed.diagnostics,
+      positions: mergeLayout(schema, duplicated.snapshot.positions),
+      documents: duplicated.documents,
+      activeDocumentId: duplicated.meta.id,
+      selection: null,
+      hoveredColumn: null,
+      externallyChanged: false,
+    });
+  },
+
+  deleteDocument: (id) => {
+    const wasActive = id === get().activeDocumentId;
+    const deleted = deleteStoredDocument(id, SAMPLE_DBML);
+    if (!wasActive) {
+      set({ documents: deleted.documents });
+      return;
+    }
+    const parsed = parseDbml(deleted.snapshot.dbml);
+    const schema = parsed.ok ? parsed.schema : emptySchema();
+    set({
+      source: deleted.snapshot.dbml,
+      schema,
+      hasValidSchema: parsed.ok,
+      diagnostics: parsed.diagnostics,
+      positions: mergeLayout(schema, deleted.snapshot.positions),
+      documents: deleted.documents,
+      activeDocumentId: deleted.activeId,
+      selection: null,
+      hoveredColumn: null,
+      externallyChanged: false,
+    });
+  },
+
+  replaceActiveDocument: (source) => {
+    set({ source });
+    get().commitParse();
+  },
+
+  appendToActiveDocument: (dbml) => {
+    const source = `${get().source.trimEnd()}\n\n${dbml.trim()}\n`;
+    set({ source });
+    get().commitParse();
+  },
+
   markExternalChange: () => set({ externallyChanged: true }),
+  syncExternalIndex: () => set({ documents: listDocuments() }),
 
   reloadFromStorage: () => {
-    const doc = loadDoc();
-    if (!doc) return;
-    const result = parseDbml(doc.dbml);
-    const schema = result.ok ? result.schema : get().schema;
+    const { activeDocumentId, schema: previousSchema, hasValidSchema } = get();
+    const snapshot = loadDocument(activeDocumentId);
+    if (!snapshot) return;
+    const result = parseDbml(snapshot.dbml);
+    const schema = result.ok ? result.schema : previousSchema;
     set({
-      source: doc.dbml,
+      source: snapshot.dbml,
       schema,
-      hasValidSchema: result.ok || get().hasValidSchema,
+      hasValidSchema: result.ok || hasValidSchema,
       diagnostics: result.diagnostics,
-      positions: mergeLayout(schema, doc.positions ?? {}),
+      positions: mergeLayout(schema, snapshot.positions),
+      documents: listDocuments(),
       externallyChanged: false,
       selection: null,
+      hoveredColumn: null,
     });
   },
 }));
+
+/** Storage keys relevant to the currently active document's conflict banner. */
+export const isActiveDocumentStorageKey = (key: string | null): boolean =>
+  key === null ||
+  key === ACTIVE_DOCUMENT_KEY ||
+  key === DOCUMENTS_KEY ||
+  key === `${DOCUMENT_KEY_PREFIX}${useStore.getState().activeDocumentId}`;

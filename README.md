@@ -27,6 +27,16 @@ npm run dev
 
 The app is client-only; `npm run build` emits a static bundle that can be hosted anywhere.
 
+## Deployment
+
+Cloudflare Pages (Git integration):
+
+- Build command: `npm run build`
+- Build output directory: `dist`
+- Node.js: `20.19+` or `22.12+` (Pages currently defaults to `22.16.0`)
+
+Pages serves this client-side SPA's fallback automatically because the build has no top-level `404.html`.
+
 ## Scripts
 
 | Command | Description |

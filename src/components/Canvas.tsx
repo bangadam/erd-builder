@@ -3,7 +3,6 @@ import {
   BackgroundVariant,
   Controls,
   type Edge,
-  MarkerType,
   type Node,
   type NodeMouseHandler,
   type NodeChange,
@@ -16,6 +15,7 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { CrowsFootMarkers, MARKER_IDS } from './CrowsFootMarkers';
 import { TableNode, type TableNodeData } from './TableNode';
 import { HEADER_HEIGHT, ROW_HEIGHT } from '@/lib/layout';
+import { refColumnPairs } from '@/lib/schema';
 import { useStore } from '@/store/useStore';
 
 const nodeTypes = { table: TableNode };
@@ -54,35 +54,39 @@ const CanvasInner = () => {
     };
 
     return schema.refs.flatMap((ref) => {
+      const pairs = refColumnPairs(ref);
+
       // A ref pointing at a table or column that doesn't exist has no anchor to
       // draw from; the parser already reported it, so skip rather than guess.
-      if (rowOf(ref.from.tableId, ref.from.column) === null) return [];
-      if (rowOf(ref.to.tableId, ref.to.column) === null) return [];
+      if (pairs.some((pair) => rowOf(ref.from.tableId, pair.from) === null || rowOf(ref.to.tableId, pair.to) === null)) return [];
 
       const dimmed =
         hovered !== null &&
-        !(hovered.tableId === ref.from.tableId && hovered.column === ref.from.column) &&
-        !(hovered.tableId === ref.to.tableId && hovered.column === ref.to.column);
+        !pairs.some(
+          (pair) =>
+            (hovered.tableId === ref.from.tableId && hovered.column === pair.from) ||
+            (hovered.tableId === ref.to.tableId && hovered.column === pair.to),
+        );
 
-      return [
-        {
-          id: ref.id,
-          source: ref.from.tableId,
-          sourceHandle: `${ref.from.column}-r`,
-          target: ref.to.tableId,
-          targetHandle: `${ref.to.column}-l`,
-          type: 'smoothstep',
-          markerStart: MARKER_IDS[ref.from.cardinality],
-          markerEnd: MARKER_IDS[ref.to.cardinality],
-          style: {
-            stroke: 'var(--edge)',
-            strokeWidth: 1.5,
-            opacity: dimmed ? 0.18 : 1,
-            // `<>` has no physical FK, so it reads as a logical link.
-            strokeDasharray: ref.manyToMany ? '6 4' : undefined,
-          },
+      return pairs.map((pair, i) => ({
+        id: `${ref.id}#${i}`,
+        source: ref.from.tableId,
+        sourceHandle: `${pair.from}-r`,
+        target: ref.to.tableId,
+        targetHandle: `${pair.to}-l`,
+        type: 'smoothstep',
+        ...(i === 0
+          ? { markerStart: MARKER_IDS[ref.from.cardinality], markerEnd: MARKER_IDS[ref.to.cardinality] }
+          : {}),
+        data: { refId: ref.id },
+        style: {
+          stroke: 'var(--edge)',
+          strokeWidth: 1.5,
+          opacity: dimmed ? 0.18 : 1,
+          // `<>` has no physical FK, so it reads as a logical link.
+          strokeDasharray: ref.manyToMany ? '6 4' : undefined,
         },
-      ];
+      }));
     });
   }, [schema, hovered]);
 
@@ -100,10 +104,10 @@ const CanvasInner = () => {
     [select],
   );
 
-  // An editor-originated selection pans the canvas; a canvas click must not,
-  // or clicking a node would yank the viewport out from under the cursor.
+  // Editor and palette selections pan the canvas; a canvas click itself must
+  // not, or clicking a node would yank the viewport out from under the cursor.
   useEffect(() => {
-    if (selection?.origin !== 'editor') return;
+    if (selection?.origin !== 'editor' && selection?.origin !== 'palette') return;
     const node = getNode(selection.tableId);
     if (!node) return;
     const height = HEADER_HEIGHT + (node.measured?.height ?? ROW_HEIGHT);
@@ -120,7 +124,6 @@ const CanvasInner = () => {
         onNodesChange={onNodesChange}
         onNodeClick={onNodeClick}
         onPaneClick={() => select(null)}
-        defaultEdgeOptions={{ markerEnd: { type: MarkerType.Arrow } }}
         fitView
         minZoom={0.1}
         maxZoom={2}

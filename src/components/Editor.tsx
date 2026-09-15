@@ -128,11 +128,14 @@ export const Editor = () => {
   useEffect(
     () =>
       useStore.subscribe((state, prev) => {
-        if (state.selection === prev.selection) return;
-        if (state.selection?.origin !== 'canvas' || !view.current) return;
+        if (!state.selection || state.selection === prev.selection || !view.current) return;
+        if (state.selection.origin !== 'canvas' && state.selection.origin !== 'palette') return;
         const table = state.schema.tables.find((t) => t.id === state.selection?.tableId);
         if (!table) return;
-        const pos = Math.min(table.span.start.offset, view.current.state.doc.length);
+        const column = state.selection.column
+          ? table.columns.find((item) => item.name === state.selection?.column)
+          : undefined;
+        const pos = Math.min(column?.span.start.offset ?? table.span.start.offset, view.current.state.doc.length);
         view.current.dispatch({
           selection: { anchor: pos },
           effects: EditorView.scrollIntoView(pos, { y: 'center' }),

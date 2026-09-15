@@ -1,4 +1,5 @@
 import { parseDbml } from './src/lib/parseDbml';
+import { refColumnPairs } from './src/lib/schema';
 import { mergeLayout, nodeHeight, prunePositions } from './src/lib/layout';
 
 let failed = 0;
@@ -53,6 +54,38 @@ check('ref endpoints resolve to table ids', userPosts?.from.tableId === 'core.po
 check('optional modifier becomes zero-or-many', userPosts?.from.cardinality === 'zero-or-many', userPosts?.from.cardinality);
 check('one side stays one', userPosts?.to.cardinality === 'one', userPosts?.to.cardinality);
 check('fk ref is not many-to-many', userPosts?.manyToMany === false);
+
+check('single-column ref yields one ordered pair', userPosts !== undefined && JSON.stringify(refColumnPairs(userPosts)) === JSON.stringify([{ from: 'user_id', to: 'id' }]), userPosts && refColumnPairs(userPosts));
+
+const compositeResult = parseDbml(`Table orders {
+  id int
+  tenant_id int
+  indexes {
+    (id, tenant_id) [pk]
+  }
+}
+Table order_items {
+  order_id int
+  tenant_id int
+}
+Ref: order_items.(order_id, tenant_id) > orders.(id, tenant_id)
+`);
+if (!compositeResult.ok) throw new Error('composite ref must parse: ' + JSON.stringify(compositeResult.diagnostics));
+const compositeRef = compositeResult.schema.refs[0];
+const compositePairs = refColumnPairs(compositeRef);
+check(
+  'composite ref yields ordered column pairs',
+  JSON.stringify(compositePairs) === JSON.stringify([
+    { from: 'order_id', to: 'id' },
+    { from: 'tenant_id', to: 'tenant_id' },
+  ]),
+  compositePairs,
+);
+const mismatchedRef = {
+  ...compositeRef,
+  to: { ...compositeRef.to, columns: compositeRef.to.columns.slice(0, 1) },
+};
+check('mismatched arity zips to shorter side', refColumnPairs(mismatchedRef).length === 1, refColumnPairs(mismatchedRef));
 
 const m2m = parseDbml('Table a {\n  id int\n}\nTable b {\n  id int\n}\nRef: a.id <> b.id\n');
 check('many-to-many flagged', m2m.ok && m2m.schema.refs[0].manyToMany === true);

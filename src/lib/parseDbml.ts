@@ -107,20 +107,18 @@ const normalize = (schemas: VendorSchema[]): Schema => ({
     s.refs.flatMap((r, i): Ref[] => {
       const [a, b] = r.endpoints;
       if (!a || !b) return [];
-      // ponytail: only the first column of a composite ref is drawn; a composite
-      // FK renders as one edge per endpoint column once anyone asks for it.
       return [
         {
           id: r.name ?? `ref_${s.name}_${i}`,
           name: r.name,
           from: {
             tableId: tableId(a.schemaName, a.tableName),
-            column: a.fieldNames[0],
+            columns: [...a.fieldNames],
             cardinality: CARDINALITIES[a.relation] ?? 'many',
           },
           to: {
             tableId: tableId(b.schemaName, b.tableName),
-            column: b.fieldNames[0],
+            columns: [...b.fieldNames],
             cardinality: CARDINALITIES[b.relation] ?? 'many',
           },
           manyToMany: a.relation.includes('*') && b.relation.includes('*'),

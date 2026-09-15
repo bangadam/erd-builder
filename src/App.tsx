@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Canvas } from '@/components/Canvas';
+import { CommandPalette } from '@/components/CommandPalette';
+import { DocumentMenu } from '@/components/DocumentMenu';
 import { Editor } from '@/components/Editor';
+import { ImportDialog } from '@/components/ImportDialog';
+import { Inspector } from '@/components/Inspector';
 import { downloadSchema, EXPORT_LABELS, type ExportFormat } from '@/lib/exportSchema';
-import { onExternalDocChange } from '@/lib/storage';
-import { useStore } from '@/store/useStore';
+import { DOCUMENTS_KEY, onExternalStorageChange } from '@/lib/storage';
+import { isActiveDocumentStorageKey, useStore } from '@/store/useStore';
 
 const MIN_EDITOR = 320;
 const MAX_EDITOR = 900;
@@ -11,6 +15,9 @@ const MAX_EDITOR = 900;
 const ExportMenu = () => {
   const source = useStore((s) => s.source);
   const hasValidSchema = useStore((s) => s.hasValidSchema);
+  const documentName = useStore(
+    (s) => s.documents.find((document) => document.id === s.activeDocumentId)?.name ?? 'schema',
+  );
   const [open, setOpen] = useState(false);
 
   return (
@@ -35,7 +42,7 @@ const ExportMenu = () => {
               type="button"
               className="block w-full px-3 py-1.5 text-left text-[13px] hover:bg-[var(--accent)]"
               onMouseDown={() => {
-                downloadSchema(source, format);
+                downloadSchema(source, format, documentName);
                 setOpen(false);
               }}
             >
@@ -58,12 +65,34 @@ const App = () => {
   const externallyChanged = useStore((s) => s.externallyChanged);
   const reloadFromStorage = useStore((s) => s.reloadFromStorage);
   const dragging = useRef(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', ui.theme === 'dark');
   }, [ui.theme]);
 
-  useEffect(() => onExternalDocChange(useStore.getState().markExternalChange), []);
+  useEffect(
+    () =>
+      onExternalStorageChange((key) => {
+        // Another tab renaming an unrelated document only needs an index refresh;
+        // a write to the document we are editing is a genuine conflict.
+        if (key === DOCUMENTS_KEY) useStore.getState().syncExternalIndex();
+        else if (isActiveDocumentStorageKey(key)) useStore.getState().markExternalChange();
+      }),
+    [],
+  );
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -85,7 +114,7 @@ const App = () => {
   return (
     <div className="flex h-full flex-col">
       <header className="flex shrink-0 items-center gap-2 border-b px-3 py-1.5">
-        <span className="font-semibold">ERD Builder</span>
+        <DocumentMenu />
         <span className="text-[13px]" style={{ color: 'var(--muted-foreground)' }}>
           {tableCount} tables
         </span>
@@ -101,6 +130,21 @@ const App = () => {
               {hasValidSchema ? ' · showing last valid' : ''}
             </span>
           ) : null}
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            title="Search tables, columns, documents (⌘K)"
+            className="rounded-md border px-2.5 py-1 text-[13px] hover:bg-[var(--accent)]"
+          >
+            Search
+          </button>
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="rounded-md border px-2.5 py-1 text-[13px] hover:bg-[var(--accent)]"
+          >
+            Import SQL
+          </button>
           <button
             type="button"
             onClick={autoArrange}
@@ -127,7 +171,10 @@ const App = () => {
       </header>
 
       {externallyChanged ? (
-        <div className="flex shrink-0 items-center gap-3 border-b px-3 py-1.5 text-[13px]" style={{ background: 'var(--muted)' }}>
+        <div
+          className="flex shrink-0 items-center gap-3 border-b px-3 py-1.5 text-[13px]"
+          style={{ background: 'var(--muted)' }}
+        >
           <span>This document was changed in another tab.</span>
           <button type="button" onClick={reloadFromStorage} className="underline">
             Reload
@@ -152,9 +199,12 @@ const App = () => {
             />
           </>
         )}
-        <div className="min-w-0 flex-1">
+        <div className="relative min-w-0 flex-1">
           {hasValidSchema ? (
-            <Canvas />
+            <>
+              <Canvas />
+              <Inspector />
+            </>
           ) : (
             <div
               className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center"
@@ -162,7 +212,11 @@ const App = () => {
             >
               <p className="font-medium">Nothing to draw yet</p>
               {diagnostics.map((d) => (
-                <p key={`${d.span.start.offset}-${d.message}`} className="text-[13px]" style={{ color: 'var(--muted-foreground)' }}>
+                <p
+                  key={`${d.span.start.offset}-${d.message}`}
+                  className="text-[13px]"
+                  style={{ color: 'var(--muted-foreground)' }}
+                >
                   Line {d.span.start.line}: {d.message}
                 </p>
               ))}
@@ -170,6 +224,13 @@ const App = () => {
           )}
         </div>
       </main>
+
+      {importOpen ? <ImportDialog onClose={() => setImportOpen(false)} /> : null}
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onImport={() => setImportOpen(true)}
+      />
     </div>
   );
 };

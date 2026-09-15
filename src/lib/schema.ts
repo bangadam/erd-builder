@@ -57,7 +57,7 @@ export type Table = {
 export type RefEnd = {
   /** `schema.table` — matches `Table.id`. */
   tableId: string;
-  column: string;
+  columns: string[];
   cardinality: Cardinality;
 };
 
@@ -70,6 +70,18 @@ export type Ref = {
   manyToMany: boolean;
   span: Span;
 };
+
+export type RefColumnPair = { from: string; to: string };
+
+/** Pair composite-ref columns by position, ignoring an unmatched tail. */
+export const refColumnPairs = (ref: Ref): RefColumnPair[] => {
+  const count = Math.min(ref.from.columns.length, ref.to.columns.length);
+  return Array.from({ length: count }, (_, i) => ({
+    from: ref.from.columns[i],
+    to: ref.to.columns[i],
+  }));
+};
+
 
 export type EnumDef = {
   id: string;

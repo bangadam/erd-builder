@@ -108,3 +108,17 @@
     -webkit-font-smoothing: antialiased;
   }
 }
+
+/**
+ * React Flow ships light-only control styling, so its icons all but vanish on
+ * the dark canvas. Re-point them at theme tokens instead of hardcoded colors.
+ */
+.react-flow .react-flow__controls-button {
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  fill: var(--foreground);
+}
+
+.react-flow .react-flow__controls-button:hover {
+  background: var(--accent);
+}
