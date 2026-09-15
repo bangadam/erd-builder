@@ -2,6 +2,8 @@
 
 Text-first ERD visualizer for [DBML](https://dbml.dbdiagram.io/docs). Write a schema, get a live entity-relationship diagram with crow's-foot notation. Runs entirely in the browser — no account, no backend, no data leaves the tab.
 
+**Live app:** [erd-builder.bangadam-dev.workers.dev](https://erd-builder.bangadam-dev.workers.dev/)
+
 ## Why
 
 Diagram editors make you drag boxes. Schemas are text, they live in version control, and they are reviewed as diffs. ERD Builder keeps DBML as the single source of truth and treats the canvas as a pure render of it, so the picture can never drift from the definition.
@@ -17,6 +19,11 @@ Diagram editors make you drag boxes. Schemas are text, they live in version cont
 - **Cross-highlight** — click a table to jump the editor to its block; move the cursor into a block to highlight the node.
 - **Export** — `.dbml`, PostgreSQL, MySQL, and SQL Server DDL.
 - **Light and dark themes** — driven by CSS custom properties; `[headercolor: #hex]` is honoured.
+- **SQL import** — paste or drop a `.sql` file, choose a dialect, and preview the DBML before creating, replacing, or appending a document.
+- **Local document library** — create, rename, duplicate, and delete diagrams stored in this browser.
+- **Command palette** — find tables, columns, documents, and actions with `Cmd+K` or `Ctrl+K`.
+- **Schema inspector** — read column details, indexes, enum values, relationships, and up to 100 sample rows.
+- **Composite foreign keys** — one edge per column pair, with cardinality markers on the first pair only.
 
 ## Getting started
 
@@ -29,13 +36,22 @@ The app is client-only; `npm run build` emits a static bundle that can be hosted
 
 ## Deployment
 
-Cloudflare Pages (Git integration):
+Production runs on **Cloudflare Workers Static Assets**:
 
-- Build command: `npm run build`
-- Build output directory: `dist`
-- Node.js: `20.19+` or `22.12+` (Pages currently defaults to `22.16.0`)
+https://erd-builder.bangadam-dev.workers.dev/
 
-Pages serves this client-side SPA's fallback automatically because the build has no top-level `404.html`.
+The initial Wrangler setup deployed this frontend to Workers rather than a Pages project. The application remains browser-only: there is no database or application API on the server.
+
+To deploy from this repository with an account that has access to the Worker:
+
+```bash
+npx wrangler login
+npm run deploy
+```
+
+`npm run deploy` runs the production build and then `wrangler deploy`. The Cloudflare Vite plugin writes the asset deployment configuration, and `wrangler.jsonc` enables the single-page application fallback. Use Node.js `20.19+` or `22.12+`.
+
+Deployment is currently manual; pushing to GitHub does not automatically publish a new version.
 
 ## Scripts
 
@@ -44,7 +60,8 @@ Pages serves this client-side SPA's fallback automatically because the build has
 | `npm run dev` | Vite dev server |
 | `npm run build` | Type-check and build for production |
 | `npm run lint` | oxlint |
-| `npm run smoke` | Assertion suites for the parser, layout, and completion logic |
+| `npm run smoke` | Assertion suites for parsing, layout, completion, storage, and SQL import |
+| `npm run deploy` | Build and publish to the configured Cloudflare Worker |
 
 ## Architecture
 
@@ -52,19 +69,20 @@ Pages serves this client-side SPA's fallback automatically because the build has
 src/
 ├─ lib/
 │  ├─ schema.ts         internal model — no vendor types
-│  ├─ parseDbml.ts      the only module that imports @dbml/core
+│  ├─ parseDbml.ts      DBML parser adapter
 │  ├─ layout.ts         dagre placement + position merging
 │  ├─ dbmlLanguage.ts   CodeMirror syntax highlighting
 │  ├─ dbmlComplete.ts   context-aware completion sources
+│  ├─ importSql.ts      SQL-to-DBML conversion and dialect detection
 │  ├─ exportSchema.ts   DBML and SQL output
 │  └─ storage.ts        localStorage persistence, cross-tab detection
 ├─ store/useStore.ts    Zustand state
-└─ components/          Canvas, TableNode, Editor, CrowsFootMarkers
+└─ components/          Editor, canvas, document menu, import dialog, palette, inspector
 ```
 
 Three decisions carry most of the design:
 
-**The parser is isolated.** `parseDbml.ts` is the sole boundary with `@dbml/core`; everything downstream sees the model in `schema.ts`. Vendor shapes are awkward for rendering (circular references, endpoint pairs, relation strings), and pinning components to them would make the library impossible to replace.
+**The parser is isolated.** `parseDbml.ts` translates the vendor parser's output into the model in `schema.ts`. SQL import and export have separate adapters. Components do not depend directly on vendor shapes such as circular references and endpoint objects.
 
 **Positions live outside the parse.** DBML carries no coordinates, so `positions` is stored separately and keyed by qualified table name. Layout only runs for tables it has not seen, which is what keeps the canvas still while you type.
 
@@ -74,15 +92,14 @@ Three decisions carry most of the design:
 
 React 19 · TypeScript · Vite · Tailwind CSS v4 · [React Flow](https://reactflow.dev) · [CodeMirror 6](https://codemirror.net) · [Zustand](https://zustand.docs.pmnd.rs) · [`@dbml/core`](https://www.npmjs.com/package/@dbml/core) · [dagre](https://github.com/dagrejs/dagre)
 
-UI primitives come from the [ReUI](https://reui.io) shadcn registry (Radix variant).
+The [ReUI](https://reui.io) shadcn registry is configured in `components.json`; the current application components are implemented locally.
 
 ## Limitations
 
 - Desktop only — a split editor and canvas are not usable at phone widths.
-- One document; multi-document management is not implemented.
 - The canvas renders the schema but does not edit it. Changes are made in DBML.
-- Composite foreign keys draw a single edge from the first column pair.
-- Sample `Records` are parsed and surfaced as a row-count badge, but not rendered as data, and `@dbml/core` does not emit them as SQL `INSERT` statements.
+- Sample `Records` appear in the inspector (first 100 rows); SQL export does not emit them as `INSERT` statements.
+- Browser storage is local to each origin and browser. Clearing site data removes local documents; export DBML files for backups.
 
 ## License
 
