@@ -4,6 +4,12 @@ Text-first ERD visualizer for [DBML](https://dbml.dbdiagram.io/docs). Write a sc
 
 **Live app:** [erd-builder.bangadam-dev.workers.dev](https://erd-builder.bangadam-dev.workers.dev/)
 
+## Preview
+
+[![ERD Builder homepage with the DBML editor, three connected tables, and the graph-paper workspace](docs/images/homepage.png)](https://erd-builder.bangadam-dev.workers.dev/)
+
+The live workbench: edit DBML on the left and explore the generated relationship diagram on the right.
+
 ## Why
 
 Diagram editors make you drag boxes. Schemas are text, they live in version control, and they are reviewed as diffs. ERD Builder keeps DBML as the single source of truth and treats the canvas as a pure render of it, so the picture can never drift from the definition.
