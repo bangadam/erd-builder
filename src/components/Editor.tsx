@@ -26,35 +26,20 @@ const toCmDiagnostics = (view: EditorView): CmDiagnostic[] => {
 };
 
 const editorTheme = EditorView.theme({
-  '&': { height: '100%', fontSize: '13px', background: 'var(--editor-bg)', color: 'var(--foreground)' },
-  '.cm-scroller': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', lineHeight: '1.6' },
-  '.cm-gutters': { background: 'var(--editor-bg)', border: 'none', color: 'var(--muted-foreground)' },
+  '&': { height: '100%', fontSize: '12px', background: 'var(--editor-bg)', color: 'var(--foreground)' },
+  '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.8' },
+  '.cm-content': { padding: '16px 0 28px', caretColor: 'var(--foreground)' },
+  '.cm-line': { padding: '0 16px 0 8px' },
+  '.cm-gutters': { background: 'var(--editor-bg)', border: 'none', color: 'var(--muted-foreground)', fontSize: '10px', paddingRight: '6px' },
+  '.cm-lineNumbers .cm-gutterElement': { minWidth: '32px' },
   '.cm-activeLine': { background: 'var(--editor-active-line)' },
   '.cm-activeLineGutter': { background: 'var(--editor-active-line)' },
   '&.cm-focused': { outline: 'none' },
-
-  '.cm-tooltip.cm-tooltip-autocomplete': {
-    background: 'var(--card)',
-    border: '1px solid var(--border)',
-    borderRadius: '6px',
-    boxShadow: '0 8px 24px rgb(0 0 0 / 18%)',
-    overflow: 'hidden',
-  },
-  '.cm-tooltip-autocomplete > ul': {
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-    maxHeight: '16em',
-  },
-  '.cm-tooltip-autocomplete > ul > li': {
-    padding: '3px 8px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    gap: '12px',
-  },
-  '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
-    background: 'var(--table-header)',
-    color: 'var(--table-header-fg)',
-  },
-  '.cm-completionDetail': { fontStyle: 'normal', opacity: 0.65, fontSize: '11px' },
+  '.cm-tooltip.cm-tooltip-autocomplete': { background: 'var(--card)', color: 'var(--foreground)', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: 'none', overflow: 'hidden' },
+  '.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--font-mono)', maxHeight: '16em' },
+  '.cm-tooltip-autocomplete > ul > li': { padding: '5px 10px', display: 'flex', justifyContent: 'space-between', gap: '12px' },
+  '.cm-tooltip-autocomplete > ul > li[aria-selected]': { background: 'var(--primary)', color: 'var(--primary-foreground)' },
+  '.cm-completionDetail': { fontStyle: 'normal', opacity: 0.8, fontSize: '11px' },
 });
 
 export const Editor = () => {
@@ -68,6 +53,7 @@ export const Editor = () => {
     const state = EditorState.create({
       doc: useStore.getState().source,
       extensions: [
+        EditorView.contentAttributes.of({ 'aria-label': 'DBML schema editor', spellcheck: 'false' }),
         lineNumbers(),
         highlightActiveLine(),
         highlightActiveLineGutter(),

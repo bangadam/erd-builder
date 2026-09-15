@@ -1,0 +1,451 @@
+.import-backdrop,
+.command-backdrop {
+  z-index: 50;
+  background: color-mix(in srgb, var(--foreground) 38%, transparent);
+}
+
+.import-backdrop {
+  padding: 24px;
+}
+
+.ui-dialog {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: none;
+}
+
+.import-dialog {
+  display: flex;
+  width: min(900px, 90vw);
+  min-height: min(560px, calc(100vh - 48px));
+  max-height: calc(100vh - 48px);
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.import-dialog__header {
+  flex: none;
+  padding: 18px 24px;
+}
+
+.import-dialog__heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.import-dialog__heading-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--foreground);
+}
+
+.import-dialog__body {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  padding: 20px 24px;
+}
+
+.import-dialog__pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.import-dialog__pane + .import-dialog__pane {
+  border-left: 1px solid var(--border);
+  padding-left: 16px;
+}
+
+.import-dialog__pane-header {
+  display: flex;
+  min-height: 34px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.import-dialog__pane-hint {
+  margin: 3px 0 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.import-dialog__dialect {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.import-dialog__select {
+  width: auto;
+  min-width: 116px;
+  height: 32px;
+  padding: 0 26px 0 9px;
+  font-size: 12px;
+}
+
+.import-dialog__source-wrap {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  border-radius: 8px;
+}
+
+.import-dialog__source-wrap.is-dragging {
+  outline: 2px solid var(--foreground);
+  outline-offset: 2px;
+}
+
+.import-dialog__textarea {
+  width: 100%;
+  min-height: 260px;
+  resize: none;
+  padding: 12px;
+  background: var(--background);
+  font-size: 12px;
+  line-height: 1.6;
+  outline: none;
+}
+
+.import-dialog__textarea:focus-visible {
+  outline: 2px solid var(--foreground);
+  outline-offset: -2px;
+}
+
+.import-dialog__textarea::placeholder {
+  color: var(--muted-foreground);
+  opacity: 0.75;
+}
+
+.import-dialog__drop-note {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.import-dialog__file {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+}
+
+.import-dialog__help {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.import-dialog__help summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--foreground);
+  font-size: 11px;
+}
+
+.import-dialog__command {
+  display: block;
+  margin-top: 7px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+  padding: 8px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.import-dialog__privacy {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.import-dialog__preview {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  padding: 12px;
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.import-dialog__preview.is-error {
+  color: var(--destructive);
+}
+
+.import-dialog__preview--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: var(--muted-foreground);
+  flex-direction: column;
+  text-align: center;
+}
+
+.import-dialog__preview--empty strong {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.import-dialog__preview--empty span {
+  max-width: 220px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.import-dialog__footer {
+  flex: none;
+  flex-wrap: wrap;
+  padding: 16px 24px;
+}
+
+.import-dialog__footer .ui-button:first-child {
+  margin-left: auto;
+}
+
+.import-dialog__footer .ui-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.command-backdrop {
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+
+.command-palette {
+  width: min(640px, calc(100vw - 32px));
+  overflow: hidden;
+}
+
+.command-palette__header {
+  display: flex;
+  height: 54px;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+}
+
+.command-palette__search-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted-foreground);
+}
+
+.command-palette__input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 14px;
+  outline: none;
+}
+
+.command-palette__input::placeholder {
+  color: var(--muted-foreground);
+}
+
+.command-palette__input:focus-visible {
+  outline: 2px solid var(--foreground);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.command-palette__esc,
+.command-palette__footer kbd {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+  font-size: 10px;
+  line-height: 20px;
+  padding: 0 6px;
+}
+
+.command-palette__esc {
+  flex: none;
+  text-transform: uppercase;
+}
+
+.command-palette__results {
+  max-height: min(56vh, 520px);
+  overflow: auto;
+  padding: 7px;
+}
+
+.command-palette__group + .command-palette__group {
+  margin-top: 8px;
+}
+
+.command-palette__group-label {
+  padding: 7px 9px 5px;
+}
+
+.command-palette__item {
+  min-height: 34px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--foreground);
+  font-size: 13px;
+  text-align: left;
+}
+
+.command-palette__item svg {
+  flex: none;
+  color: var(--muted-foreground);
+}
+
+.command-palette__item.is-selected {
+  border-color: var(--border);
+  background: var(--accent);
+}
+
+.command-palette__item.is-selected svg {
+  color: var(--foreground);
+}
+
+.command-palette__item:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--foreground);
+  outline-offset: -2px;
+}
+
+.command-palette__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-palette__hint {
+  margin-left: auto;
+  flex: none;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+  font-size: 10px;
+}
+
+.command-palette__empty {
+  margin: 0;
+  padding: 20px 10px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  text-align: center;
+}
+
+.command-palette__footer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-top: 1px solid var(--border);
+  padding: 9px 16px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+.command-palette__footer span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.command-palette__footer kbd + kbd {
+  margin-left: 1px;
+}
+
+@media (max-width: 700px) {
+  .import-backdrop {
+    padding: 12px;
+  }
+
+  .import-dialog {
+    width: 100%;
+    min-height: calc(100vh - 24px);
+    max-height: calc(100vh - 24px);
+  }
+
+  .import-dialog__body {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .import-dialog__pane {
+    min-height: 280px;
+  }
+
+  .import-dialog__pane + .import-dialog__pane {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+    padding-top: 16px;
+    padding-left: 0;
+  }
+
+  .import-dialog__footer .ui-button:first-child {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .import-dialog__header,
+  .import-dialog__body,
+  .import-dialog__footer {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .import-dialog__footer {
+    align-items: stretch;
+  }
+
+  .import-dialog__footer .ui-button {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .command-palette__footer {
+    gap: 9px;
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+}

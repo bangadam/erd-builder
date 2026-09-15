@@ -60,7 +60,7 @@ Deployment is currently manual; pushing to GitHub does not automatically publish
 | `npm run dev` | Vite dev server |
 | `npm run build` | Type-check and build for production |
 | `npm run lint` | oxlint |
-| `npm run smoke` | Assertion suites for parsing, layout, completion, storage, and SQL import |
+| `npm run smoke` | Parsing, layout, completion, storage, SQL import, and worker race regressions |
 | `npm run deploy` | Build and publish to the configured Cloudflare Worker |
 
 ## Architecture
@@ -73,20 +73,27 @@ src/
 │  ├─ layout.ts         dagre placement + position merging
 │  ├─ dbmlLanguage.ts   CodeMirror syntax highlighting
 │  ├─ dbmlComplete.ts   context-aware completion sources
-│  ├─ importSql.ts      SQL-to-DBML conversion and dialect detection
-│  ├─ exportSchema.ts   DBML and SQL output
+│  ├─ sqlOptions.ts     lightweight dialect metadata and detection
+│  ├─ importSql.ts      worker-side SQL-to-DBML conversion
+│  ├─ exportSchema.ts   browser download with off-thread SQL conversion
+│  ├─ schema.worker.ts parser/import/export worker
+│  ├─ schemaWorkerClient.ts correlated worker requests
 │  └─ storage.ts        localStorage persistence, cross-tab detection
 ├─ store/useStore.ts    Zustand state
 └─ components/          Editor, canvas, document menu, import dialog, palette, inspector
 ```
 
-Three decisions carry most of the design:
+Key design decisions:
 
 **The parser is isolated.** `parseDbml.ts` translates the vendor parser's output into the model in `schema.ts`. SQL import and export have separate adapters. Components do not depend directly on vendor shapes such as circular references and endpoint objects.
 
 **Positions live outside the parse.** DBML carries no coordinates, so `positions` is stored separately and keyed by qualified table name. Layout only runs for tables it has not seen, which is what keeps the canvas still while you type.
 
 **Node size is computed, never measured.** Table height is `header + columns × row`, derived from schema data. Reading it back from the DOM would only be available after paint and would flicker the diagram on every parse.
+
+**Parsing stays off the UI thread.** The full `@dbml/core` bundle runs in a dedicated Web Worker. The editor and application shell render without waiting for it; the diagram appears only after a real parse succeeds. Request IDs plus per-document revisions prevent late results from overwriting newer edits. The vendor bundle is still downloaded—worker isolation improves responsiveness, not the total parser download size.
+
+The workbench follows `DESIGN.md`: paper surfaces, graph-paper canvas, monochrome controls, and compact outlined tables. Original model-authored SVG illustrations live in `public/art/`; no external image service or remote font is required.
 
 ## Stack
 

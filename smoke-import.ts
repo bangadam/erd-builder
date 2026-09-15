@@ -1,8 +1,5 @@
-import {
-  detectSqlDialect,
-  documentNameFromFile,
-  importSql,
-} from './src/lib/importSql';
+import { detectSqlDialect, documentNameFromFile } from './src/lib/sqlOptions';
+import { importSql } from './src/lib/importSql';
 
 let failed = 0;
 const check = (label: string, cond: boolean, detail?: unknown) => {

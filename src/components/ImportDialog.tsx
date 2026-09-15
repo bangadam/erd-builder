@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   detectSqlDialect,
   documentNameFromFile,
   DUMP_COMMANDS,
-  importSql,
   SQL_DIALECT_LABELS,
   type SqlDialect,
-} from '@/lib/importSql';
+} from '@/lib/sqlOptions';
+import type { SqlImportResult } from '@/lib/importSql';
+import { importInWorker } from '@/lib/schemaWorkerClient';
 import { useStore } from '@/store/useStore';
+import { Icon } from '@/components/Icon';
+import './overlays.css';
 
 type Props = { onClose: () => void };
 
@@ -30,20 +33,63 @@ export const ImportDialog = ({ onClose }: Props) => {
   const [chosenDialect, setChosenDialect] = useState<SqlDialect | null>(null);
   const [dragging, setDragging] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const sourceRef = useRef<HTMLTextAreaElement>(null);
+  const previousActiveElementRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    previousActiveElementRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    sourceRef.current?.focus();
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab' || !dialogRef.current) return;
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), textarea, select, summary, input:not([disabled])',
+        ),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      if (previousActiveElementRef.current?.isConnected) {
+        previousActiveElementRef.current.focus();
+      }
+    };
   }, [onClose]);
 
   const effectiveDialect = chosenDialect ?? dialect;
-  const result = useMemo(
-    () => (sql.trim() ? importSql(sql, effectiveDialect) : null),
-    [sql, effectiveDialect],
-  );
+  const [conversion, setConversion] = useState<{ source: string; dialect: SqlDialect; result: SqlImportResult } | null>(null);
+  const result = conversion?.source === sql && conversion.dialect === effectiveDialect ? conversion.result : null;
+  const pending = Boolean(sql.trim()) && result === null;
+  useEffect(() => {
+    if (!sql.trim()) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void importInWorker(sql, effectiveDialect).then((next) => {
+        if (!cancelled) setConversion({ source: sql, dialect: effectiveDialect, result: next });
+      }).catch((failure: unknown) => {
+        if (!cancelled) setConversion({ source: sql, dialect: effectiveDialect, result: { ok: false, message: failure instanceof Error ? failure.message : 'Conversion failed. Try again.' } });
+      });
+    }, 250);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [sql, effectiveDialect]);
 
   const readSql = (text: string, name?: string) => {
     setSql(text);
@@ -68,7 +114,7 @@ export const ImportDialog = ({ onClose }: Props) => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6"
+      className="dialog-backdrop import-backdrop"
       onMouseDown={(e) => {
         if (!dialogRef.current?.contains(e.target as Node)) onClose();
       }}
@@ -77,115 +123,142 @@ export const ImportDialog = ({ onClose }: Props) => {
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Import SQL"
-        className="flex max-h-full w-[900px] flex-col overflow-hidden rounded-lg border shadow-2xl"
-        style={{ background: 'var(--card)' }}
+        aria-labelledby="import-dialog-title"
+        aria-describedby="import-dialog-subtitle"
+        className="ui-dialog import-dialog"
+        onMouseDown={(e) => e.stopPropagation()}
       >
-        <header className="flex items-center justify-between border-b px-4 py-2.5">
-          <span className="font-semibold">Import SQL</span>
-          <button type="button" onClick={onClose} className="px-1 text-[15px] leading-none">
-            ×
+        <header className="dialog-header import-dialog__header">
+          <div className="import-dialog__heading">
+            <span className="import-dialog__heading-icon" aria-hidden="true">
+              <Icon name="upload" size={18} />
+            </span>
+            <div>
+              <h2 id="import-dialog-title" className="dialog-title">
+                Import SQL
+              </h2>
+              <p id="import-dialog-subtitle" className="dialog-subtitle">
+                Convert a schema dump into editable DBML
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="icon-button" aria-label="Close import dialog">
+            <Icon name="close" size={16} />
           </button>
         </header>
 
-        <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 p-4">
-          <div className="flex min-h-0 flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <label htmlFor="sql-dialect" className="text-[13px]">
-                Dialect
+        <div className="dialog-body import-dialog__body">
+          <section className="import-dialog__pane" aria-labelledby="import-source-label">
+            <div className="import-dialog__pane-header">
+              <div>
+                <p id="import-source-label" className="field-label">
+                  Source SQL
+                </p>
+                <p className="import-dialog__pane-hint">Paste SQL or drop a .sql file</p>
+              </div>
+              <label className="import-dialog__dialect">
+                <span className="field-label">Dialect</span>
+                <select
+                  aria-label="SQL dialect"
+                  value={effectiveDialect}
+                  onChange={(e) => setChosenDialect(e.target.value as SqlDialect)}
+                  className="ui-input import-dialog__select"
+                >
+                  {DIALECTS.map((value) => (
+                    <option key={value} value={value}>
+                      {SQL_DIALECT_LABELS[value]}
+                    </option>
+                  ))}
+                </select>
               </label>
-              <select
-                id="sql-dialect"
-                value={effectiveDialect}
-                onChange={(e) => setChosenDialect(e.target.value as SqlDialect)}
-                className="rounded-md border px-2 py-1 text-[13px]"
-                style={{ background: 'var(--background)' }}
-              >
-                {DIALECTS.map((value) => (
-                  <option key={value} value={value}>
-                    {SQL_DIALECT_LABELS[value]}
-                  </option>
-                ))}
-              </select>
-              {chosenDialect === null && sql.trim() ? (
-                <span className="text-[12px]" style={{ color: 'var(--muted-foreground)' }}>
-                  detected
-                </span>
+            </div>
+
+            <div className={`import-dialog__source-wrap${dragging ? ' is-dragging' : ''}`}>
+              <textarea
+                ref={sourceRef}
+                value={sql}
+                onChange={(e) => readSql(e.target.value)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={async (e) => {
+                  e.preventDefault();
+                  setDragging(false);
+                  const file = e.dataTransfer.files[0];
+                  if (file) readSql(await file.text(), file.name);
+                }}
+                spellCheck={false}
+                aria-label="Source SQL to import"
+                placeholder="CREATE TABLE accounts (&#10;  id integer primary key&#10;);"
+                className="ui-input import-dialog__textarea mono"
+              />
+              {!sql.trim() ? (
+                <div className="import-dialog__drop-note" aria-hidden="true">
+                  <Icon name="file" size={16} />
+                  <span>Drop a SQL file here</span>
+                </div>
               ) : null}
             </div>
 
-            <textarea
-              value={sql}
-              onChange={(e) => readSql(e.target.value)}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragging(true);
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={async (e) => {
-                e.preventDefault();
-                setDragging(false);
-                const file = e.dataTransfer.files[0];
-                if (file) readSql(await file.text(), file.name);
-              }}
-              spellCheck={false}
-              placeholder="Paste CREATE TABLE statements, or drop a .sql file here"
-              className="min-h-0 flex-1 resize-none rounded-md border p-2 font-mono text-[12px] outline-none"
-              style={{
-                background: 'var(--background)',
-                borderColor: dragging ? 'var(--highlight)' : 'var(--border)',
-              }}
-            />
+            {fileName ? (
+              <div className="import-dialog__file" title={fileName}>
+                <Icon name="file" size={14} />
+                <span className="truncate">{fileName}</span>
+              </div>
+            ) : null}
 
-            <details className="text-[12px]" style={{ color: 'var(--muted-foreground)' }}>
-              <summary className="cursor-pointer">How do I get this file?</summary>
-              <code className="mt-1 block rounded-md border p-2 font-mono">
-                {DUMP_COMMANDS[effectiveDialect]}
-              </code>
-              <p className="mt-1">
-                Nothing is uploaded — the conversion runs entirely in this browser tab.
-              </p>
+            <details className="import-dialog__help">
+              <summary>How do I get this file?</summary>
+              <code className="import-dialog__command mono">{DUMP_COMMANDS[effectiveDialect]}</code>
             </details>
-          </div>
+            <p className="import-dialog__privacy">
+              <Icon name="lock" size={13} />
+              Nothing is uploaded — conversion runs entirely in this browser tab.
+            </p>
+          </section>
 
-          <div className="flex min-h-0 flex-col gap-2">
-            <span className="text-[13px]">Preview</span>
-            <pre
-              className="min-h-0 flex-1 overflow-auto rounded-md border p-2 font-mono text-[12px] whitespace-pre-wrap"
-              style={{
-                background: 'var(--background)',
-                color: result && !result.ok ? 'var(--destructive)' : 'var(--foreground)',
-              }}
-            >
-              {result ? (result.ok ? result.dbml : result.message) : 'Nothing to preview yet.'}
-            </pre>
-          </div>
+          <section className="import-dialog__pane" aria-labelledby="import-preview-label">
+            <div className="import-dialog__pane-header">
+              <div>
+                <p id="import-preview-label" className="field-label">
+                  DBML preview
+                </p>
+                <p className="import-dialog__pane-hint">
+                  {pending ? 'Converting in the background…' : result?.ok ? 'Ready to apply' : result ? 'Check the source SQL' : 'Output appears here'}
+                </p>
+              </div>
+              {chosenDialect === null && sql.trim() ? <span className="ui-badge">detected</span> : null}
+            </div>
+            {result ? (
+              <pre
+                className={`import-dialog__preview mono${result.ok ? '' : ' is-error'}`}
+                aria-label="Converted DBML preview"
+              >
+                {result.ok ? result.dbml : result.message}
+              </pre>
+            ) : (
+              <div className="import-dialog__preview import-dialog__preview--empty">
+                <Icon name="code" size={20} />
+                <strong>{pending ? 'Reading your schema…' : 'Nothing to preview yet'}</strong>
+                <span>{pending ? 'Conversion runs in this browser, without blocking your editor.' : 'Paste SQL or drop a file to see converted DBML.'}</span>
+              </div>
+            )}
+          </section>
         </div>
 
-        <footer className="flex items-center justify-end gap-2 border-t px-4 py-2.5">
-          <button
-            type="button"
-            onClick={() => apply('append')}
-            disabled={!result?.ok}
-            className="rounded-md border px-2.5 py-1 text-[13px] hover:bg-[var(--accent)] disabled:opacity-40"
-          >
+        <footer className="dialog-footer import-dialog__footer">
+          <button type="button" onClick={() => apply('append')} disabled={!result?.ok} className="ui-button ui-button-ghost">
+            <Icon name="plus" size={15} />
             Append here
           </button>
-          <button
-            type="button"
-            onClick={() => apply('replace')}
-            disabled={!result?.ok}
-            className="rounded-md border px-2.5 py-1 text-[13px] hover:bg-[var(--accent)] disabled:opacity-40"
-          >
+          <button type="button" onClick={() => apply('replace')} disabled={!result?.ok} className="ui-button ui-button-ghost">
+            <Icon name="edit" size={15} />
             Replace this document
           </button>
-          <button
-            type="button"
-            onClick={() => apply('new')}
-            disabled={!result?.ok}
-            className="rounded-md px-3 py-1 text-[13px] font-medium disabled:opacity-40"
-            style={{ background: 'var(--table-header)', color: 'var(--table-header-fg)' }}
-          >
+          <button type="button" onClick={() => apply('new')} disabled={!result?.ok} className="ui-button ui-button-primary">
+            <Icon name="file" size={15} />
             Create new document
           </button>
         </footer>

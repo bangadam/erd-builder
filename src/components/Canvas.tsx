@@ -14,7 +14,7 @@ import '@xyflow/react/dist/style.css';
 import { useCallback, useEffect, useMemo } from 'react';
 import { CrowsFootMarkers, MARKER_IDS } from './CrowsFootMarkers';
 import { TableNode, type TableNodeData } from './TableNode';
-import { HEADER_HEIGHT, ROW_HEIGHT } from '@/lib/layout';
+import { NODE_WIDTH, nodeHeight } from '@/lib/layout';
 import { refColumnPairs } from '@/lib/schema';
 import { useStore } from '@/store/useStore';
 
@@ -110,9 +110,10 @@ const CanvasInner = () => {
     if (selection?.origin !== 'editor' && selection?.origin !== 'palette') return;
     const node = getNode(selection.tableId);
     if (!node) return;
-    const height = HEADER_HEIGHT + (node.measured?.height ?? ROW_HEIGHT);
-    setCenter(node.position.x + 130, node.position.y + height / 2, { zoom: 1, duration: 300 });
-  }, [selection, getNode, setCenter]);
+    const table = schema.tables.find((item) => item.id === selection.tableId);
+    if (!table) return;
+    setCenter(node.position.x + NODE_WIDTH / 2, node.position.y + nodeHeight(table) / 2, { zoom: 1, duration: 0 });
+  }, [selection, schema.tables, getNode, setCenter]);
 
   return (
     <div className="relative h-full w-full" style={{ background: 'var(--canvas-bg)' }}>
@@ -124,14 +125,18 @@ const CanvasInner = () => {
         onNodesChange={onNodesChange}
         onNodeClick={onNodeClick}
         onPaneClick={() => select(null)}
+        nodesConnectable={false}
+        deleteKeyCode={null}
+        fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
         fitView
         minZoom={0.1}
         maxZoom={2}
         proOptions={{ hideAttribution: false }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="var(--canvas-dot)" />
+        <Background variant={BackgroundVariant.Lines} gap={24} size={0.6} color="var(--canvas-dot)" />
         <Controls onFitView={() => fitView({ duration: 200 })} />
       </ReactFlow>
+      {!selection && <img className="canvas-art" src="/art/rainwork.svg" alt="" width="360" height="140" aria-hidden="true" />}
     </div>
   );
 };

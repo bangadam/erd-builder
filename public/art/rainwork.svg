@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="140" viewBox="0 0 360 140" fill="none">
+  <title>Rainwork — little schema keepers</title>
+  <desc>Two small raindrop creatures join hand-drawn database cards with a cobalt ink line.</desc>
+  <g stroke="#cfd9de" stroke-width="1">
+    <path d="M60 25H306M60 49H306M60 73H306M60 97H306M60 121H306M74 13V129M98 13V129M122 13V129M146 13V129M170 13V129M194 13V129M218 13V129M242 13V129M266 13V129M290 13V129" opacity=".48"/>
+  </g>
+  <g stroke="#282b3b" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7">
+    <path d="M91 28C91 25 93 23 97 23L159 24C162 24 164 26 164 29L162 84C162 87 160 89 157 89L94 88C91 88 89 86 90 83Z" fill="#fff"/>
+    <path d="m91 43 72 1M103 54h32M103 66h45M103 77h26"/>
+    <path d="M219 57C219 54 221 52 224 52L283 51C287 51 289 53 289 56L291 111C291 114 289 116 286 116L223 117C220 117 218 115 218 112Z" fill="#fff"/>
+    <path d="m219 71 70-1M232 84h34M232 97h45M232 108h19"/>
+  </g>
+  <g stroke="#3e7ff0" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+    <path d="M163 60c17-1 14 1 27 1 6 0 10 4 10 10v12c0 6 4 9 10 9h9"/>
+    <path d="m210 87 8 5-8 5M174 57v7"/>
+    <path d="M43 40c2 15 18 25 19 39 1 10-7 18-18 18-13 0-21-8-19-20 2-12 13-23 18-37Z" fill="#3e7ff0"/>
+    <path d="m32 96-3 14-8 2m29-15 5 12 7 2M61 77l15-3 9-11M29 77l-12-5"/>
+    <path d="M321 65c4 9 15 17 15 27 0 9-7 15-16 15-10 0-16-7-15-15 1-10 11-16 16-27Z" fill="#3e7ff0"/>
+    <path d="m313 107-4 12-6 1m22-13 7 10 7-1M305 91l-8-6M336 92l9-8 5 1"/>
+    <path d="m70 24 3-7m6 12 6-4M308 43l5-7m4 12 7-3" opacity=".65"/>
+  </g>
+  <g fill="#fff"><circle cx="38" cy="77" r="1.9"/><circle cx="49" cy="77" r="1.9"/><circle cx="315" cy="93" r="1.6"/><circle cx="324" cy="93" r="1.6"/></g>
+  <path d="M39 84q5 4 9-1M316 98q4 3 7-1" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

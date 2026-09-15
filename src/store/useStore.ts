@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { mergeLayout, prunePositions, type XY } from '@/lib/layout';
-import { parseDbml } from '@/lib/parseDbml';
-import { type Diagnostic, emptySchema, type Schema } from '@/lib/schema';
+import { parseInWorker } from '@/lib/schemaWorkerClient';
+import { type Diagnostic, type ParseResult, emptySchema, type Schema } from '@/lib/schema';
 import {
   ACTIVE_DOCUMENT_KEY,
   createStoredDocument,
@@ -82,6 +82,10 @@ type State = {
   /** False until the very first successful parse, so the canvas can show a real error state. */
   hasValidSchema: boolean;
   diagnostics: Diagnostic[];
+  /** True while the current source is being parsed by the schema worker. */
+  parsePending: boolean;
+  /** Non-syntax worker failures, such as an unavailable worker or crashed worker. */
+  parseFailure: string | null;
   positions: Record<string, XY>;
   documents: DocumentMeta[];
   activeDocumentId: string;
@@ -92,7 +96,7 @@ type State = {
 
   setSource: (source: string) => void;
   /** Debounced parse; mutates schema/diagnostics/positions together so they never disagree. */
-  commitParse: () => void;
+  commitParse: () => Promise<void>;
   moveTable: (id: string, position: XY) => void;
   autoArrange: () => void;
   select: (selection: Selection) => void;
@@ -112,194 +116,222 @@ type State = {
 
 const DEFAULT_UI: UiState = { editorWidth: 460, editorCollapsed: false, theme: 'light' };
 const library = ensureDocumentLibrary(SAMPLE_DBML);
-const firstParse = parseDbml(library.snapshot.dbml);
-const initialSchema = firstParse.ok ? firstParse.schema : emptySchema();
+const revisions = new Map<string, number>();
+const lastValidSchemas = new Map<string, Schema>();
 
-export const useStore = create<State>((set, get) => ({
-  source: library.snapshot.dbml,
-  schema: initialSchema,
-  hasValidSchema: firstParse.ok,
-  diagnostics: firstParse.diagnostics,
-  positions: mergeLayout(initialSchema, library.snapshot.positions),
-  documents: library.documents,
-  activeDocumentId: library.activeId,
-  selection: null,
-  hoveredColumn: null,
-  ui: loadUi() ?? DEFAULT_UI,
-  externallyChanged: false,
+const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : 'The schema worker failed.';
 
-  setSource: (source) => set({ source }),
+export const useStore = create<State>((set, get) => {
+  const isCurrentRequest = (id: string, source: string, revision: number): boolean =>
+    get().activeDocumentId === id && get().source === source && revisions.get(id) === revision;
 
-  commitParse: () => {
-    const { source, positions, selection, activeDocumentId } = get();
-    const result = parseDbml(source);
-    if (!result.ok) {
-      // Invalid mid-typing is normal: keep the last good schema visible, but
-      // persist the draft so reload cannot discard what the user just typed.
-      const documents = saveDocument(activeDocumentId, { dbml: source, positions });
-      set({ diagnostics: result.diagnostics, documents });
-      return;
+  const beginParse = (id: string, source: string): Promise<void> => {
+    const revision = (revisions.get(id) ?? 0) + 1;
+    revisions.set(id, revision);
+    set({ parsePending: true, parseFailure: null });
+
+    let operation: Promise<ParseResult>;
+    try {
+      operation = parseInWorker(source);
+    } catch (error) {
+      if (isCurrentRequest(id, source, revision)) {
+        set({ parsePending: false, parseFailure: errorMessage(error) });
+      }
+      return Promise.resolve();
     }
-    const next = mergeLayout(result.schema, prunePositions(result.schema, positions));
-    const documents = saveDocument(activeDocumentId, { dbml: source, positions: next });
-    set({
-      schema: result.schema,
-      hasValidSchema: true,
-      diagnostics: [],
-      positions: next,
-      documents,
-      selection:
-        selection && result.schema.tables.some((table) => table.id === selection.tableId)
-          ? selection
-          : null,
-    });
-  },
 
-  moveTable: (id, position) => {
-    const { source, activeDocumentId } = get();
-    const positions = { ...get().positions, [id]: position };
-    const documents = saveDocument(activeDocumentId, { dbml: source, positions });
-    set({ positions, documents });
-  },
+    return operation
+      .then((result) => {
+        if (!isCurrentRequest(id, source, revision)) return;
+        if (!result.ok) {
+          // Invalid mid-typing is normal: preserve the last valid schema and positions.
+          set({ diagnostics: result.diagnostics, parsePending: false, parseFailure: null });
+          return;
+        }
 
-  autoArrange: () => {
-    const { schema, source, activeDocumentId } = get();
-    const positions = mergeLayout(schema, {});
-    const documents = saveDocument(activeDocumentId, { dbml: source, positions });
-    set({ positions, documents });
-  },
+        const { positions, selection } = get();
+        const nextPositions = mergeLayout(result.schema, prunePositions(result.schema, positions));
+        const documents = saveDocument(id, { dbml: source, positions: nextPositions });
+        lastValidSchemas.set(id, result.schema);
+        set({
+          schema: result.schema,
+          hasValidSchema: true,
+          diagnostics: [],
+          parsePending: false,
+          parseFailure: null,
+          positions: nextPositions,
+          documents,
+          selection:
+            selection && result.schema.tables.some((table) => table.id === selection.tableId)
+              ? selection
+              : null,
+        });
+      })
+      .catch((error: unknown) => {
+        if (isCurrentRequest(id, source, revision)) {
+          set({ parsePending: false, parseFailure: errorMessage(error) });
+        }
+      });
+  };
 
-  select: (selection) => set({ selection }),
-  hoverColumn: (hoveredColumn) => set({ hoveredColumn }),
+  const flushDraft = (): void => {
+    const { activeDocumentId, source, positions } = get();
+    set({ documents: saveDocument(activeDocumentId, { dbml: source, positions }) });
+  };
 
-  patchUi: (patch) => {
-    const ui = { ...get().ui, ...patch };
-    set({ ui });
-    saveUi(ui);
-  },
-
-  createDocument: (input = {}) => {
-    const source = input.dbml ?? SAMPLE_DBML;
-    const parsed = parseDbml(source);
-    const schema = parsed.ok ? parsed.schema : emptySchema();
-    const positions = parsed.ok
-      ? mergeLayout(schema, input.positions ?? {})
-      : input.positions ?? {};
-    const snapshot = { dbml: source, positions };
-    const created = createStoredDocument(input.name ?? 'Untitled Diagram', snapshot);
+  const activate = (
+    id: string,
+    source: string,
+    storedPositions: Record<string, XY>,
+    documents: DocumentMeta[],
+  ): void => {
+    const cachedSchema = lastValidSchemas.get(id);
+    const schema = cachedSchema ?? emptySchema();
     set({
       source,
       schema,
-      hasValidSchema: parsed.ok,
-      diagnostics: parsed.diagnostics,
-      positions,
-      documents: created.documents,
-      activeDocumentId: created.meta.id,
-      selection: null,
-      hoveredColumn: null,
-      externallyChanged: false,
-    });
-    return created.meta.id;
-  },
-
-  switchDocument: (id) => {
-    if (id === get().activeDocumentId) return;
-    const snapshot = loadDocument(id);
-    if (!snapshot) return;
-    const parsed = parseDbml(snapshot.dbml);
-    const schema = parsed.ok ? parsed.schema : emptySchema();
-    setActiveDocument(id);
-    set({
-      source: snapshot.dbml,
-      schema,
-      hasValidSchema: parsed.ok,
-      diagnostics: parsed.diagnostics,
-      positions: mergeLayout(schema, snapshot.positions),
-      documents: listDocuments(),
+      hasValidSchema: cachedSchema !== undefined,
+      diagnostics: [],
+      parsePending: false,
+      parseFailure: null,
+      positions: mergeLayout(schema, storedPositions),
+      documents,
       activeDocumentId: id,
       selection: null,
       hoveredColumn: null,
       externallyChanged: false,
     });
-  },
+    void beginParse(id, source);
+  };
 
-  renameDocument: (id, name) => set({ documents: renameStoredDocument(id, name) }),
+  return {
+    source: library.snapshot.dbml,
+    schema: emptySchema(),
+    hasValidSchema: false,
+    diagnostics: [],
+    parsePending: false,
+    parseFailure: null,
+    positions: library.snapshot.positions,
+    documents: library.documents,
+    activeDocumentId: library.activeId,
+    selection: null,
+    hoveredColumn: null,
+    ui: loadUi() ?? DEFAULT_UI,
+    externallyChanged: false,
 
-  duplicateDocument: (id) => {
-    const duplicated = duplicateStoredDocument(id);
-    if (!duplicated) return;
-    const parsed = parseDbml(duplicated.snapshot.dbml);
-    const schema = parsed.ok ? parsed.schema : emptySchema();
-    set({
-      source: duplicated.snapshot.dbml,
-      schema,
-      hasValidSchema: parsed.ok,
-      diagnostics: parsed.diagnostics,
-      positions: mergeLayout(schema, duplicated.snapshot.positions),
-      documents: duplicated.documents,
-      activeDocumentId: duplicated.meta.id,
-      selection: null,
-      hoveredColumn: null,
-      externallyChanged: false,
-    });
-  },
+    setSource: (source) => {
+      if (source === get().source) return;
+      const id = get().activeDocumentId;
+      revisions.set(id, (revisions.get(id) ?? 0) + 1);
+      set({ source, parsePending: true, parseFailure: null });
+    },
 
-  deleteDocument: (id) => {
-    const wasActive = id === get().activeDocumentId;
-    const deleted = deleteStoredDocument(id, SAMPLE_DBML);
-    if (!wasActive) {
-      set({ documents: deleted.documents });
-      return;
-    }
-    const parsed = parseDbml(deleted.snapshot.dbml);
-    const schema = parsed.ok ? parsed.schema : emptySchema();
-    set({
-      source: deleted.snapshot.dbml,
-      schema,
-      hasValidSchema: parsed.ok,
-      diagnostics: parsed.diagnostics,
-      positions: mergeLayout(schema, deleted.snapshot.positions),
-      documents: deleted.documents,
-      activeDocumentId: deleted.activeId,
-      selection: null,
-      hoveredColumn: null,
-      externallyChanged: false,
-    });
-  },
+    commitParse: () => {
+      const { source, positions, activeDocumentId } = get();
+      const documents = saveDocument(activeDocumentId, { dbml: source, positions });
+      set({ documents });
+      return beginParse(activeDocumentId, source);
+    },
 
-  replaceActiveDocument: (source) => {
-    set({ source });
-    get().commitParse();
-  },
+    moveTable: (id, position) => {
+      const { source, activeDocumentId } = get();
+      const positions = { ...get().positions, [id]: position };
+      const documents = saveDocument(activeDocumentId, { dbml: source, positions });
+      set({ positions, documents });
+    },
 
-  appendToActiveDocument: (dbml) => {
-    const source = `${get().source.trimEnd()}\n\n${dbml.trim()}\n`;
-    set({ source });
-    get().commitParse();
-  },
+    autoArrange: () => {
+      const { schema, source, activeDocumentId } = get();
+      const positions = mergeLayout(schema, {});
+      const documents = saveDocument(activeDocumentId, { dbml: source, positions });
+      set({ positions, documents });
+    },
 
-  markExternalChange: () => set({ externallyChanged: true }),
-  syncExternalIndex: () => set({ documents: listDocuments() }),
+    select: (selection) => set({ selection }),
+    hoverColumn: (hoveredColumn) => set({ hoveredColumn }),
 
-  reloadFromStorage: () => {
-    const { activeDocumentId, schema: previousSchema, hasValidSchema } = get();
-    const snapshot = loadDocument(activeDocumentId);
-    if (!snapshot) return;
-    const result = parseDbml(snapshot.dbml);
-    const schema = result.ok ? result.schema : previousSchema;
-    set({
-      source: snapshot.dbml,
-      schema,
-      hasValidSchema: result.ok || hasValidSchema,
-      diagnostics: result.diagnostics,
-      positions: mergeLayout(schema, snapshot.positions),
-      documents: listDocuments(),
-      externallyChanged: false,
-      selection: null,
-      hoveredColumn: null,
-    });
-  },
-}));
+    patchUi: (patch) => {
+      const ui = { ...get().ui, ...patch };
+      set({ ui });
+      saveUi(ui);
+    },
+
+    createDocument: (input = {}) => {
+      flushDraft();
+      const source = input.dbml ?? SAMPLE_DBML;
+      const positions = input.positions ?? {};
+      const created = createStoredDocument(input.name ?? 'Untitled Diagram', {
+        dbml: source,
+        positions,
+      });
+      activate(created.meta.id, source, positions, created.documents);
+      return created.meta.id;
+    },
+
+    switchDocument: (id) => {
+      if (id === get().activeDocumentId) return;
+      flushDraft();
+      const snapshot = loadDocument(id);
+      if (!snapshot) return;
+      setActiveDocument(id);
+      activate(id, snapshot.dbml, snapshot.positions, listDocuments());
+    },
+
+    renameDocument: (id, name) => set({ documents: renameStoredDocument(id, name) }),
+
+    duplicateDocument: (id) => {
+      flushDraft();
+      const duplicated = duplicateStoredDocument(id);
+      if (!duplicated) return;
+      activate(
+        duplicated.meta.id,
+        duplicated.snapshot.dbml,
+        duplicated.snapshot.positions,
+        duplicated.documents,
+      );
+    },
+
+    deleteDocument: (id) => {
+      flushDraft();
+      const wasActive = id === get().activeDocumentId;
+      const deleted = deleteStoredDocument(id, SAMPLE_DBML);
+      if (!wasActive) {
+        set({ documents: deleted.documents });
+        return;
+      }
+      revisions.delete(id);
+      lastValidSchemas.delete(id);
+      activate(deleted.activeId, deleted.snapshot.dbml, deleted.snapshot.positions, deleted.documents);
+    },
+
+    replaceActiveDocument: (source) => {
+      set({ source });
+      void get().commitParse();
+    },
+
+    appendToActiveDocument: (dbml) => {
+      const source = `${get().source.trimEnd()}\n\n${dbml.trim()}\n`;
+      set({ source });
+      void get().commitParse();
+    },
+
+    markExternalChange: () => set({ externallyChanged: true }),
+    syncExternalIndex: () => set({ documents: listDocuments() }),
+
+    reloadFromStorage: () => {
+      const { activeDocumentId } = get();
+      const snapshot = loadDocument(activeDocumentId);
+      if (!snapshot) return;
+      lastValidSchemas.delete(activeDocumentId);
+      activate(activeDocumentId, snapshot.dbml, snapshot.positions, listDocuments());
+    },
+  };
+});
+
+// Restore the source synchronously above, then move the initial parse off the
+// main thread without making a stale schema look valid during startup.
+void useStore.getState().commitParse();
 
 /** Storage keys relevant to the currently active document's conflict banner. */
 export const isActiveDocumentStorageKey = (key: string | null): boolean =>

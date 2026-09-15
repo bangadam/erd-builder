@@ -1,4 +1,4 @@
-import { exporter } from '@dbml/core';
+import { exportInWorker } from './schemaWorkerClient';
 
 export type ExportFormat = 'dbml' | 'postgres' | 'mysql' | 'mssql';
 
@@ -16,22 +16,15 @@ export const EXPORT_LABELS: Record<ExportFormat, string> = {
   mssql: 'SQL Server',
 };
 
-/**
- * SQL goes straight through the vendor exporter, so dialect coverage stays
- * whatever `@dbml/core` supports instead of a hand-rolled subset.
- *
- * `includeRecords` only applies to DBML output, so no dialect here emits
- * sample rows as INSERTs — seed data is deliberately not promised in the UI.
- *
- * Throws when the document is invalid; callers export from the last valid
- * source, so a failure here means the vendor rejected input we parsed fine.
- */
-export const downloadSchema = (dbml: string, format: ExportFormat, name = 'schema'): void => {
-  const content = format === 'dbml' ? dbml : exporter.export(dbml, format);
+/** DBML is downloaded unchanged; SQL conversion runs off the rendering thread. */
+export const downloadSchema = async (dbml: string, format: ExportFormat, name = 'schema'): Promise<void> => {
+  const content = format === 'dbml' ? dbml : await exportInWorker(dbml, format);
   const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
   const a = document.createElement('a');
   a.href = url;
   a.download = `${name}.${EXTENSIONS[format]}`;
+  document.body.append(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 };

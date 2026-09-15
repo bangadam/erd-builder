@@ -1,40 +1,7 @@
 import { importer } from '@dbml/core';
 
-export type SqlDialect = 'postgres' | 'mysql' | 'mssql' | 'snowflake' | 'oracle';
-
-/**
- * `bigquery` is deliberately absent: the vendor importer returns an empty
- * string for standard CREATE TABLE input, which would look like a silent
- * success to the user.
- */
-export const SQL_DIALECT_LABELS: Record<SqlDialect, string> = {
-  postgres: 'PostgreSQL',
-  mysql: 'MySQL',
-  mssql: 'SQL Server',
-  snowflake: 'Snowflake',
-  oracle: 'Oracle',
-};
-
-export const DUMP_COMMANDS: Record<SqlDialect, string> = {
-  postgres: 'pg_dump --schema-only "$DATABASE_URL" > schema.sql',
-  mysql: 'mysqldump --no-data <database> > schema.sql',
-  mssql: 'Script the database as CREATE TO… in SQL Server Management Studio',
-  snowflake: 'snowsql -q "SELECT GET_DDL(\'DATABASE\', \'<database>\')" -o output_file=schema.sql',
-  oracle: "expdp <user>/<password> content=metadata_only directory=<dir> dumpfile=schema.dmp",
-};
-
-/**
- * Picks the initial dialect without ever hiding the selector. Checks run from
- * most distinctive marker to least: backticks and ENGINE= are unambiguous
- * MySQL, while SERIAL also appears in other dialects and so is tested last.
- */
-export const detectSqlDialect = (sql: string): SqlDialect => {
-  if (/`[^`]+`|\bAUTO_INCREMENT\b|\bENGINE\s*=/i.test(sql)) return 'mysql';
-  if (/\[dbo\]|\bNVARCHAR\b|\bIDENTITY\s*\(/i.test(sql)) return 'mssql';
-  if (/\bVARCHAR2\b|\bNUMBER\s*\(\d/i.test(sql)) return 'oracle';
-  if (/\bVARIANT\b|\bCLUSTER\s+BY\b/i.test(sql)) return 'snowflake';
-  return 'postgres';
-};
+import { SQL_DIALECT_LABELS } from './sqlOptions';
+import type { SqlDialect } from './sqlOptions';
 
 export type SqlImportResult = { ok: true; dbml: string } | { ok: false; message: string };
 
@@ -69,6 +36,3 @@ export const importSql = (sql: string, dialect: SqlDialect): SqlImportResult => 
   }
 };
 
-/** Strips the extension so an imported file names its document sensibly. */
-export const documentNameFromFile = (fileName: string): string =>
-  fileName.replace(/\.[^.]+$/, '').trim() || 'Imported schema';
