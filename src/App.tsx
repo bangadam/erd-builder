@@ -87,6 +87,7 @@ const App = () => {
   const workArea = useRef<HTMLElement>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [mobileView, setMobileView] = useState<'schema' | 'diagram'>('diagram');
   const valid = diagnostics.length === 0 && !parseFailure;
 
   useEffect(() => {
@@ -119,7 +120,7 @@ const App = () => {
         <span className="brand-divider" aria-hidden="true" />
         <DocumentMenu />
         <div className="header-actions">
-          <button type="button" className="ui-button header-search" aria-label="Jump to anything… ⌘ K — Search tables, columns, documents and actions" onClick={() => setPaletteOpen(true)}>
+          <button type="button" className="ui-button header-search" aria-label="Jump to anything. Search tables, columns, documents and actions" onClick={() => setPaletteOpen(true)}>
             <Icon name="search" /><span>Jump to anything…</span><kbd aria-hidden="true">⌘ K</kbd>
           </button>
           <a className="ui-button header-github" href="https://github.com/bangadam/erd-builder" target="_blank" rel="noreferrer"><Icon name="github" /> GitHub <Icon name="external" size={11} /></a>
@@ -133,12 +134,8 @@ const App = () => {
 
       <section className="workspace-heading" aria-label="Workspace overview">
         <div className="heading-identity">
-          <div>
-            <div className="workspace-eyebrow"><Icon name="folder" size={12} /> LOCAL WORKSPACE <span>/</span> SCHEMA DESIGN</div>
-            <h1>Your schema, connected.</h1>
-            <p>A little less SQL. A little more clarity.</p>
-          </div>
-          <img className="heading-note" src="/art/schema-note.svg" width="178" height="50" alt="Make connections" />
+          <h1>Your schema, connected.</h1>
+          <p>A little less SQL. A little more clarity.</p>
         </div>
         <div className="workspace-actions">
           <span className="local-status"><Icon name="lock" size={13} /> Browser only</span>
@@ -147,9 +144,13 @@ const App = () => {
         </div>
       </section>
 
-      <main className="work-area" ref={workArea}>
+      <div className="mobile-view-switch" role="group" aria-label="Workspace view">
+        <button type="button" aria-pressed={mobileView === 'schema'} onClick={() => { patchUi({ editorCollapsed: false }); setMobileView('schema'); }}><Icon name="code" /> Schema</button>
+        <button type="button" aria-pressed={mobileView === 'diagram'} onClick={() => setMobileView('diagram')}><Icon name="layout" /> Diagram <span className="ui-badge">{tableCount}</span></button>
+      </div>
+      <main className="work-area" data-mobile-view={ui.editorCollapsed ? 'diagram' : mobileView} ref={workArea}>
         {!ui.editorCollapsed && <>
-          <section className="work-panel editor-panel" aria-label="DBML source" style={{ width: ui.editorWidth, maxWidth: 'calc(100% - 334px)' }}>
+          <section className="work-panel editor-panel" aria-label="DBML source" style={{ width: ui.editorWidth }}>
             <header className="panel-header"><Icon name="code" /><span className="panel-heading">Schema</span><span className="ui-badge">DBML</span><div className="panel-header-end"><button type="button" className="icon-button" title="Hide editor" aria-label="Hide editor" onClick={() => patchUi({ editorCollapsed: true })}><Icon name="panel" size={14} /></button></div></header>
             <div className="panel-body"><Editor /></div>
             <footer className="panel-footer"><span><Icon name="file" size={11} />{documentName.length > 20 ? `${documentName.slice(0, 20)}…` : documentName}.dbml</span><EditorStatus /></footer>
@@ -174,7 +175,7 @@ const App = () => {
         </>}
         <section className="work-panel diagram-panel" aria-label="Entity relationship diagram">
           <header className="panel-header"><Icon name="layout" /><span className="panel-heading">Diagram</span><span className="ui-badge">{tableCount} tables</span><div className="panel-header-end">
-            {!ui.editorCollapsed ? null : <button type="button" className="ui-button ui-button-ghost" onClick={() => patchUi({ editorCollapsed: false })}><Icon name="panel" size={13} /> Show editor</button>}
+            {!ui.editorCollapsed ? null : <button type="button" className="ui-button ui-button-ghost show-editor" onClick={() => patchUi({ editorCollapsed: false })}><Icon name="panel" size={13} /> Show editor</button>}
             <button type="button" className="ui-button ui-button-ghost" onClick={autoArrange}><Icon name="layout" size={13} /> Auto-arrange</button>
           </div></header>
           <div className="panel-body">
@@ -189,7 +190,7 @@ const App = () => {
           <footer className="panel-footer"><span className={valid ? '' : 'diagnostic-badge'} role="status"><Icon name={valid ? 'check' : 'info'} size={12} />{parseFailure ? 'Schema engine unavailable' : parsePending ? 'Parsing schema…' : valid ? 'Schema is valid' : `${diagnostics.length} errors${hasValidSchema ? ' · showing last valid schema' : ''}`}</span><span>{relationCount} relationships <span aria-hidden="true">·</span> Crow’s foot</span></footer>
         </section>
       </main>
-      <footer className="app-footer"><span><Icon name="lock" size={11} /> Your schema stays in this browser. Always.</span><span>Text to tables. Nothing in between.</span></footer>
+      <footer className="app-footer"><span><Icon name="lock" size={12} /> Your schema stays in this browser. Always.</span><span><kbd>⌘ K</kbd> Search tables and commands</span></footer>
       {importOpen && <ImportDialog onClose={() => setImportOpen(false)} />}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} onImport={() => setImportOpen(true)} />
     </div>

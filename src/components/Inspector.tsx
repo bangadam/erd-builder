@@ -38,7 +38,9 @@ const Tabs = ({ tab, setTab }: { tab: Tab; setTab: (tab: Tab) => void }) => (
           const index = (Object.keys(TAB_LABELS) as Tab[]).indexOf(value);
           const direction = event.key === 'ArrowRight' ? 1 : -1;
           const next = (index + direction + 3) % 3;
-          setTab((Object.keys(TAB_LABELS) as Tab[])[next]);
+          const nextTab = (Object.keys(TAB_LABELS) as Tab[])[next];
+          setTab(nextTab);
+          document.getElementById(`inspector-tab-${nextTab}`)?.focus();
         }}
       >
         {TAB_LABELS[value]}
@@ -120,12 +122,7 @@ const Columns = ({ table }: { table: Table }) => {
             const targetColumns = forward ? pairs.map((pair) => pair.to) : pairs.map((pair) => pair.from);
             return (
               <div key={ref.id} className="details-reference">
-                <div className="details-reference-line">
-                  <code className="details-reference-code">
-                    {source} ({sourceColumns.join(', ')})
-                  </code>
-                  {ref.name ? <span className="details-reference-name">{ref.name}</span> : null}
-                </div>
+                {ref.name ? <div className="details-reference-line"><span className="details-reference-name">{ref.name}</span></div> : null}
                 <div className="details-reference-line">
                   <code className="details-reference-code">
                     {source} ({sourceColumns.join(', ')})
@@ -220,7 +217,7 @@ export const Inspector = () => {
     <aside className="details-inspector" aria-label={`Details for ${table.name}`}>
       <header className="details-inspector-header">
         <div className="details-inspector-identity">
-          <div className="details-inspector-identity-label">Table</div>
+          <div className="details-inspector-identity-label"><Icon name="table" size={13} /> Table</div>
           <h2 className="details-inspector-title">{table.name}</h2>
           <div className="details-inspector-schema">{table.schema}.{table.name}</div>
           {table.alias ? <div className="details-inspector-schema">as {table.alias}</div> : null}

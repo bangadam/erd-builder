@@ -11,7 +11,7 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { CrowsFootMarkers, MARKER_IDS } from './CrowsFootMarkers';
 import { TableNode, type TableNodeData } from './TableNode';
 import { NODE_WIDTH, nodeHeight } from '@/lib/layout';
@@ -19,6 +19,9 @@ import { refColumnPairs } from '@/lib/schema';
 import { useStore } from '@/store/useStore';
 
 const nodeTypes = { table: TableNode };
+
+/** Small schemas should fill the panel; 1.35 keeps 11px mono type legible without blurring. */
+const FIT_VIEW = { padding: 0.16, maxZoom: 1.35, minZoom: 0.2 };
 
 /**
  * Nodes and edges are derived, never stored: `positions` in the store is the
@@ -115,6 +118,15 @@ const CanvasInner = () => {
     setCenter(node.position.x + NODE_WIDTH / 2, node.position.y + nodeHeight(table) / 2, { zoom: 1, duration: 0 });
   }, [selection, schema.tables, getNode, setCenter]);
 
+  // `fitView` on mount runs before the first parse resolves, so nodes arrive to
+  // an unfitted viewport. Refit once the first batch of nodes exists.
+  const fitted = useRef(false);
+  useEffect(() => {
+    if (fitted.current || nodes.length === 0) return;
+    fitted.current = true;
+    fitView(FIT_VIEW);
+  }, [nodes.length, fitView]);
+
   return (
     <div className="relative h-full w-full" style={{ background: 'var(--canvas-bg)' }}>
       <CrowsFootMarkers />
@@ -127,16 +139,15 @@ const CanvasInner = () => {
         onPaneClick={() => select(null)}
         nodesConnectable={false}
         deleteKeyCode={null}
-        fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
+        fitViewOptions={FIT_VIEW}
         fitView
         minZoom={0.1}
         maxZoom={2}
         proOptions={{ hideAttribution: false }}
       >
-        <Background variant={BackgroundVariant.Lines} gap={24} size={0.6} color="var(--canvas-dot)" />
-        <Controls onFitView={() => fitView({ duration: 200 })} />
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--canvas-dot)" />
+        <Controls onFitView={() => fitView({ duration: 0, ...FIT_VIEW })} />
       </ReactFlow>
-      {!selection && <img className="canvas-art" src="/art/rainwork.svg" alt="" width="360" height="140" aria-hidden="true" />}
     </div>
   );
 };

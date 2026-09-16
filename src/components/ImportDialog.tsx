@@ -151,9 +151,9 @@ export const ImportDialog = ({ onClose }: Props) => {
           <section className="import-dialog__pane" aria-labelledby="import-source-label">
             <div className="import-dialog__pane-header">
               <div>
-                <p id="import-source-label" className="field-label">
+                <label id="import-source-label" htmlFor="import-source" className="field-label">
                   Source SQL
-                </p>
+                </label>
                 <p className="import-dialog__pane-hint">Paste SQL or drop a .sql file</p>
               </div>
               <label className="import-dialog__dialect">
@@ -175,6 +175,7 @@ export const ImportDialog = ({ onClose }: Props) => {
 
             <div className={`import-dialog__source-wrap${dragging ? ' is-dragging' : ''}`}>
               <textarea
+                id="import-source"
                 ref={sourceRef}
                 value={sql}
                 onChange={(e) => readSql(e.target.value)}
@@ -215,7 +216,7 @@ export const ImportDialog = ({ onClose }: Props) => {
             </details>
             <p className="import-dialog__privacy">
               <Icon name="lock" size={13} />
-              Nothing is uploaded — conversion runs entirely in this browser tab.
+              Nothing is uploaded. Conversion runs entirely in this browser tab.
             </p>
           </section>
 
@@ -235,14 +236,20 @@ export const ImportDialog = ({ onClose }: Props) => {
               <pre
                 className={`import-dialog__preview mono${result.ok ? '' : ' is-error'}`}
                 aria-label="Converted DBML preview"
+                role={result.ok ? undefined : 'alert'}
               >
                 {result.ok ? result.dbml : result.message}
               </pre>
+            ) : pending ? (
+              <div className="import-dialog__preview" role="status" aria-label="Converting SQL to DBML">
+                <div className="preview-skeleton" aria-hidden="true"><span /><span /><span /><span /><span /></div>
+                <p className="preview-loading-label">Reading your schema…</p>
+              </div>
             ) : (
               <div className="import-dialog__preview import-dialog__preview--empty">
                 <Icon name="code" size={20} />
-                <strong>{pending ? 'Reading your schema…' : 'Nothing to preview yet'}</strong>
-                <span>{pending ? 'Conversion runs in this browser, without blocking your editor.' : 'Paste SQL or drop a file to see converted DBML.'}</span>
+                <strong>Nothing to preview yet</strong>
+                <span>Paste SQL or drop a file to see converted DBML.</span>
               </div>
             )}
           </section>

@@ -211,14 +211,13 @@ export const CommandPalette = ({ open, onClose, onImport }: Props) => {
             spellCheck={false}
             className="command-palette__input"
           />
-          <kbd className="command-palette__esc">esc</kbd>
           <span id="command-palette-title" className="sr-only">
             Command palette
           </span>
         </header>
 
         <div id="command-palette-results" role="listbox" className="command-palette__results">
-          {items.length === 0 ? <p className="command-palette__empty">No matches</p> : null}
+          {items.length === 0 ? <div className="command-palette__empty" role="status"><Icon name="search" size={24} /><strong>No matches</strong><span>Try a table, column, document, or action name.</span></div> : null}
 
           {GROUP_ORDER.map((group) => {
             const groupItems = items.filter((item) => item.group === group);
@@ -226,7 +225,7 @@ export const CommandPalette = ({ open, onClose, onImport }: Props) => {
             return (
               <section key={group} className="command-palette__group" aria-labelledby={`command-group-${group}`}>
                 <p id={`command-group-${group}`} className="section-label command-palette__group-label">
-                  {group}
+                  {group.charAt(0) + group.slice(1).toLowerCase()}
                 </p>
                 {groupItems.map((item) => {
                   rendered += 1;

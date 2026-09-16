@@ -35,7 +35,7 @@ const TableNodeImpl = ({ data, selected }: NodeProps & { data: TableNodeData }) 
           <div key={column.name} className="erd-field" data-active={isHovered || (selection?.tableId === table.id && selection.column === column.name)} style={{ height: ROW_HEIGHT }} onMouseEnter={() => hoverColumn({ tableId: table.id, column: column.name })} onMouseLeave={() => hoverColumn(null)}>
             <Handle type="target" position={Position.Left} id={`${column.name}-l`} className="!h-1 !w-1 !border-0 !bg-transparent" style={{ top: '50%' }} />
             <span className="erd-field-name">
-              {column.pk ? <span title="Primary key"><Icon name="key" size={12} /></span> : linkedColumns.has(column.name) ? <span title="Relationship column"><Icon name="link" size={12} /></span> : <span className="erd-field-symbol" aria-hidden="true">·</span>}
+              {column.pk ? <span title="Primary key"><Icon name="key" size={12} /></span> : linkedColumns.has(column.name) ? <span title="Relationship column"><Icon name="link" size={12} /></span> : <span className="erd-field-symbol" aria-hidden="true" />}
               <span>{column.name}</span>
               {column.note && <span title={column.note}><Icon name="note" size={11} /></span>}
             </span>

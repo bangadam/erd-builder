@@ -114,7 +114,11 @@ type State = {
   reloadFromStorage: () => void;
 };
 
-const DEFAULT_UI: UiState = { editorWidth: 460, editorCollapsed: false, theme: 'light' };
+const DEFAULT_UI: UiState = {
+  editorWidth: 460,
+  editorCollapsed: false,
+  theme: typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+};
 const library = ensureDocumentLibrary(SAMPLE_DBML);
 const revisions = new Map<string, number>();
 const lastValidSchemas = new Map<string, Schema>();

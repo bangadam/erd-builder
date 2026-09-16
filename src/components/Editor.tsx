@@ -27,7 +27,7 @@ const toCmDiagnostics = (view: EditorView): CmDiagnostic[] => {
 
 const editorTheme = EditorView.theme({
   '&': { height: '100%', fontSize: '12px', background: 'var(--editor-bg)', color: 'var(--foreground)' },
-  '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.8' },
+  '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.85' },
   '.cm-content': { padding: '16px 0 28px', caretColor: 'var(--foreground)' },
   '.cm-line': { padding: '0 16px 0 8px' },
   '.cm-gutters': { background: 'var(--editor-bg)', border: 'none', color: 'var(--muted-foreground)', fontSize: '10px', paddingRight: '6px' },
@@ -35,10 +35,10 @@ const editorTheme = EditorView.theme({
   '.cm-activeLine': { background: 'var(--editor-active-line)' },
   '.cm-activeLineGutter': { background: 'var(--editor-active-line)' },
   '&.cm-focused': { outline: 'none' },
-  '.cm-tooltip.cm-tooltip-autocomplete': { background: 'var(--card)', color: 'var(--foreground)', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: 'none', overflow: 'hidden' },
+  '.cm-tooltip.cm-tooltip-autocomplete': { background: 'var(--card)', color: 'var(--foreground)', border: '1px solid var(--border)', borderRadius: '8px', boxShadow: 'var(--shadow-float)', overflow: 'hidden' },
   '.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--font-mono)', maxHeight: '16em' },
   '.cm-tooltip-autocomplete > ul > li': { padding: '5px 10px', display: 'flex', justifyContent: 'space-between', gap: '12px' },
-  '.cm-tooltip-autocomplete > ul > li[aria-selected]': { background: 'var(--primary)', color: 'var(--primary-foreground)' },
+  '.cm-tooltip-autocomplete > ul > li[aria-selected]': { background: 'var(--accent)', color: 'var(--foreground)' },
   '.cm-completionDetail': { fontStyle: 'normal', opacity: 0.8, fontSize: '11px' },
 });
 
@@ -55,6 +55,7 @@ export const Editor = () => {
       extensions: [
         EditorView.contentAttributes.of({ 'aria-label': 'DBML schema editor', spellcheck: 'false' }),
         lineNumbers(),
+        EditorView.lineWrapping,
         highlightActiveLine(),
         highlightActiveLineGutter(),
         history(),
